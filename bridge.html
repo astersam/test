@@ -1,4 +1,3 @@
-{% layout none %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,8 +5,12 @@
     <title>Communication Bridge</title>
 </head>
 <body>
+    <!-- 
+        This page acts as a transactional bridge hosted on GitHub Pages.
+        It has two modes based on the URL parameters.
+    -->
     <script>
-        const MESSAGE_KEY = 'shopify-cross-page-bridge-message';
+        const MESSAGE_KEY = 'github-cross-page-bridge-message';
 
         const urlParams = new URLSearchParams(window.location.search);
         const messageToSend = urlParams.get('message');
@@ -15,7 +18,7 @@
 
         if (messageToSend && senderId) {
             // --- SENDER MODE ---
-            // A message was found in the URL. Save it with metadata and close.
+            // A message was found in the URL. Save it to localStorage and close.
             const messageData = {
                 payload: messageToSend,
                 senderId: senderId,
@@ -24,26 +27,30 @@
             try {
                 localStorage.setItem(MESSAGE_KEY, JSON.stringify(messageData));
             } catch (e) {
-                console.error('Bridge Error (Send):', e);
+                // This can happen in sandboxed environments.
+                console.error('Bridge Error (Send): Could not write to localStorage.', e);
             }
+            // Close the window after attempting the operation.
             window.close();
 
         } else {
             // --- RECEIVER MODE ---
-            // No message in the URL. Read from storage and send to parent.
+            // No message in the URL. Read from storage and send to the parent window.
             if (window.opener && !window.opener.closed) {
                 try {
                     const storedData = localStorage.getItem(MESSAGE_KEY);
                     if (storedData) {
-                        // Send the entire data object back to the window that opened this popup.
+                        // Send the found data back to the window that opened this popup.
                         window.opener.postMessage(storedData, '*');
                     }
                 } catch (e) {
-                    console.error('Bridge Error (Receive):', e);
+                    console.error('Bridge Error (Receive): Could not read or post message.', e);
                 }
             }
+            // Close the window after attempting the operation.
             window.close();
         }
     </script>
 </body>
 </html>
+
