@@ -1,0 +1,49 @@
+{% layout none %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Communication Bridge</title>
+</head>
+<body>
+    <script>
+        const MESSAGE_KEY = 'shopify-cross-page-bridge-message';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const messageToSend = urlParams.get('message');
+        const senderId = urlParams.get('senderId');
+
+        if (messageToSend && senderId) {
+            // --- SENDER MODE ---
+            // A message was found in the URL. Save it with metadata and close.
+            const messageData = {
+                payload: messageToSend,
+                senderId: senderId,
+                timestamp: Date.now()
+            };
+            try {
+                localStorage.setItem(MESSAGE_KEY, JSON.stringify(messageData));
+            } catch (e) {
+                console.error('Bridge Error (Send):', e);
+            }
+            window.close();
+
+        } else {
+            // --- RECEIVER MODE ---
+            // No message in the URL. Read from storage and send to parent.
+            if (window.opener && !window.opener.closed) {
+                try {
+                    const storedData = localStorage.getItem(MESSAGE_KEY);
+                    if (storedData) {
+                        // Send the entire data object back to the window that opened this popup.
+                        window.opener.postMessage(storedData, '*');
+                    }
+                } catch (e) {
+                    console.error('Bridge Error (Receive):', e);
+                }
+            }
+            window.close();
+        }
+    </script>
+</body>
+</html>
