@@ -17,7 +17,7 @@
         const senderId = urlParams.get('senderId');
 
         if (messageToSend && senderId) {
-            // --- SENDER MODE ---
+            // --- SENDER MODE (via Pop-up) ---
             // A message was found in the URL. Save it to localStorage and close.
             const messageData = {
                 payload: messageToSend,
@@ -34,21 +34,28 @@
             window.close();
 
         } else {
-            // --- RECEIVER MODE ---
-            // No message in the URL. Read from storage and send to the parent window.
-            if (window.opener && !window.opener.closed) {
+            // --- RECEIVER MODE (via iFrame or Pop-up) ---
+            // This mode can be triggered by a popup or an iframe.
+            // We need to find the correct window to send the message back to.
+            const targetWindow = window.opener || window.parent;
+
+            if (targetWindow && targetWindow !== window) {
                 try {
                     const storedData = localStorage.getItem(MESSAGE_KEY);
                     if (storedData) {
-                        // Send the found data back to the window that opened this popup.
-                        window.opener.postMessage(storedData, '*');
+                        // Send the found data back to the window that opened/embedded this page.
+                        targetWindow.postMessage(storedData, '*');
                     }
                 } catch (e) {
                     console.error('Bridge Error (Receive): Could not read or post message.', e);
                 }
             }
-            // Close the window after attempting the operation.
-            window.close();
+            
+            // We only close if this was opened as a popup (i.e., has an opener).
+            // An iframe doesn't need to be closed.
+            if (window.opener) {
+                window.close();
+            }
         }
     </script>
 </body>
