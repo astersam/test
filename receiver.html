@@ -2,92 +2,83 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Communication Bridge (Continuous Poller)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #1a202c; }
-        .pulse-effect {
-            animation: pulse-slow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
-        }
-        @keyframes pulse-slow {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
-        }
-    </style>
+    <title>Cookie Bridge Receiver</title>
 </head>
-<body class="p-6 h-screen flex items-center justify-center">
-    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-teal-500">
-        <h1 class="text-3xl font-extrabold text-teal-400 mb-4 border-b border-gray-700 pb-2">
-            📡 Continuous PostMessage Bridge
-        </h1>
-        <p class="text-sm text-gray-400 mb-6">
-            This page is running inside an iframe and is **polling <code>localStorage</code>** every 500ms. When new content is detected, it sends the data to its parent using <code>window.parent.postMessage()</code>.
-        </p>
-        
-        <div id="latestMessageCard" class="bg-gray-700 p-4 rounded-lg">
-            <h2 class="text-lg font-semibold text-teal-300 mb-2">Bridge Status:</h2>
-            <pre id="messageOutput" class="text-sm text-gray-200 whitespace-pre-wrap">Checking for parent window...</pre>
-        </div>
-
-        <div id="statusIndicator" class="mt-4 text-xs font-mono text-gray-500 flex items-center">
-            <span id="pollingStatus" class="pulse-effect w-3 h-3 rounded-full bg-green-500 mr-2"></span>
-            Polling initiated. Interval: 500ms.
-        </div>
-    </div>
-
+<body>
+    <!-- This page is intended to run as an invisible iframe. -->
     <script>
-        const MESSAGE_KEY = 'cross-page-communication-data';
-        const POLLING_INTERVAL = 500;
-        const messageOutput = document.getElementById('messageOutput');
-        let lastReceivedJson = null;
+        // --- Configuration ---
+        const BRIDGE_COOKIE_NAME = 'bridge_data';
+        const MESSAGE_KEY = 'bridge-cookie-message'; // Key to identify the message in the parent
+        const POLLING_INTERVAL_MS = 500; // Check every half second
 
-        // Check if this page is running inside a frame (not the top window)
-        const isIframed = (window.parent && window.parent !== window);
-        
-        if (!isIframed) {
-            messageOutput.textContent = 'STATUS: Not running in an iframe. Polling is inactive.';
-            document.getElementById('pollingStatus').classList.remove('bg-green-500');
-            document.getElementById('pollingStatus').classList.add('bg-red-500');
-        } else {
-            messageOutput.textContent = 'STATUS: Polling active and ready to bridge messages...';
-            console.log('✅ Bridge initialized. Starting 500ms polling for LocalStorage changes.');
-            
-            // Start the continuous polling loop
-            setInterval(checkLocalStorageAndPost, POLLING_INTERVAL);
+        // State variable to track the last value sent to the parent
+        let lastSentValue = null; 
+        let intervalId;
+
+        // Function to extract a specific cookie value by name
+        function getCookie(name) {
+            // Document.cookie returns a string like "key1=value1; key2=value2"
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for(let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length); // Trim leading spaces
+                if (c.indexOf(nameEQ) === 0) {
+                    // Cookie found, return the decoded value
+                    return decodeURIComponent(c.substring(nameEQ.length, c.length));
+                }
+            }
+            return null;
         }
 
-        function checkLocalStorageAndPost() {
-            if (!isIframed) return;
-
-            const currentJson = localStorage.getItem(MESSAGE_KEY);
-            
-            // Condition 1: New data exists AND it is different from the last data we sent
-            if (currentJson && currentJson !== lastReceivedJson) {
-                lastReceivedJson = currentJson; // Update the record of the last message sent
-                
-                try {
-                    // Send the raw JSON string to the parent
-                    const targetOrigin = '*'; 
-                    window.parent.postMessage(currentJson, targetOrigin);
-
-                    // Log execution status on the bridge page's console
-                    const messageData = JSON.parse(currentJson);
-                    messageOutput.textContent = 
-                        `SUCCESS: New message bridged at ${new Date().toLocaleTimeString()}\n` +
-                        `Content (Snippet): ${messageData.payload.substring(0, 50)}...`;
-                    console.log('--- 📨 PostMessage Sent (New Data) ---', messageData);
-
-                } catch (e) {
-                    messageOutput.textContent = `ERROR: Failed to send postMessage. ${e.message}`;
-                    console.error('❌ postMessage failure:', e);
-                }
-            } else if (!currentJson && lastReceivedJson !== null) {
-                // Condition 2: LocalStorage was cleared. Notify the parent if necessary.
-                lastReceivedJson = null;
-                messageOutput.textContent = 'STATUS: LocalStorage key cleared. Ready for next message.';
-                console.log('LocalStorage bridge key cleared.');
+        // --- Polling and Sending Logic ---
+        function checkCookieAndSend() {
+            if (!window.parent || window.parent === window) {
+                // Stop polling if the iframe is somehow detached or closed
+                console.error("Polling detected outside of an iframe context. Stopping interval.");
+                clearInterval(intervalId);
+                return;
             }
+
+            const currentCookieValue = getCookie(BRIDGE_COOKIE_NAME);
+
+            // 1. Check if the value has changed since the last time we checked
+            if (currentCookieValue !== lastSentValue) {
+                
+                // 2. Prepare the message
+                let message;
+                if (currentCookieValue) {
+                    // Cookie found, send the actual value
+                    message = `${MESSAGE_KEY}:${currentCookieValue}`;
+                    console.log('✅ Cookie data updated and sent to parent.');
+                    console.log('New Data:', currentCookieValue);
+                } else {
+                    // Cookie was either not present or was explicitly cleared
+                    message = `${MESSAGE_KEY}:COOKIE_CLEARED_OR_NOT_FOUND`;
+                    // Only warn if the last sent value wasn't null (i.e., we had data before and lost it)
+                    if (lastSentValue !== null) {
+                        console.warn(`🛑 Cookie '${BRIDGE_COOKIE_NAME}' cleared or not found. Sending clear signal.`);
+                    }
+                }
+                
+                // 3. Send the message and update state
+                window.parent.postMessage(message, '*');
+                lastSentValue = currentCookieValue; // Update state tracking
+            }
+        }
+
+        // --- Main Execution (Start Polling) ---
+        if (window.parent && window.parent !== window) {
+            // Check and send immediately on load to get the current state
+            checkCookieAndSend(); 
+            
+            // Set up the continuous polling loop
+            intervalId = setInterval(checkCookieAndSend, POLLING_INTERVAL_MS);
+            console.log(`✅ Bridge initialized. Starting ${POLLING_INTERVAL_MS}ms polling for cookie changes.`);
+            
+        } else {
+            console.error("This script must be run inside an iframe to function as a bridge.");
         }
     </script>
 </body>
