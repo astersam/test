@@ -3,47 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <title>Sender Bridge</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; padding: 1em; }
+        #status { padding: 0.5em; background-color: #e0e0e0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
 </head>
 <body>
-    <!-- This page is a transactional bridge. It receives combined data and sets multiple cookies. -->
+    <h1>Sender Bridge Window</h1>
+    <p>Setting active chats cookie and waiting for chat messages via postMessage...</p>
+    <div id="status">Status: Initializing...</div>
+
     <script>
+        const statusDiv = document.getElementById('status');
+        let allowedOpenerOrigin = null; // We'll learn this from the first message
+
         // Helper function to set a cookie.
         function setCookie(name, value, days = 1) {
-            // Value is expected to be URI encoded already by the parent
+            // Value is expected to be URI encoded already by the parent/sender
             const date = new Date();
             date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
             const expires = "expires=" + date.toUTCString();
             document.cookie = `${name}=${value}; ${expires}; SameSite=None; Secure; Path=/`;
             console.log(`Cookie set/updated: ${name}`);
+            updateStatus(`Cookie set/updated: ${name}`, 'success');
         }
 
-        // --- Main Logic ---
+        function updateStatus(message, type = '') {
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+            // Auto-clear status after a few seconds
+             setTimeout(() => {
+                 if (statusDiv.textContent === message) {
+                    statusDiv.textContent = 'Status: Waiting for chat messages...';
+                    statusDiv.className = '';
+                 }
+             }, 3000);
+        }
+
+        // --- Initial Load Logic (Handle Active Chats from URL) ---
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
-            const activeChatsEncoded = urlParams.get('active_chats'); // Encoded JSON array
-            const selectedChatId = urlParams.get('selected_chat_id'); // Plain chat ID
-            const selectedChatMessagesEncoded = urlParams.get('selected_chat_messages'); // Encoded JSON array
+            const activeChatsEncoded = urlParams.get('active_chats');
 
-            try {
-                // 1. Set the active_chats cookie if data is present
-                if (activeChatsEncoded) {
+            if (activeChatsEncoded) {
+                try {
                     setCookie('active_chats', activeChatsEncoded);
+                } catch (e) {
+                    console.error("Bridge Error setting active_chats:", e);
+                    updateStatus(`Error setting active_chats: ${e.message}`, 'error');
                 }
-
-                // 2. Set the cookie for the selected chat if data is present
-                if (selectedChatId && selectedChatMessagesEncoded) {
-                    setCookie(selectedChatId, selectedChatMessagesEncoded);
-                }
-
-            } catch (e) {
-                console.error("Bridge Sender Error:", e);
-            } finally {
-                // Close the window after a tiny delay to ensure cookies are set.
-                setTimeout(() => {
-                    window.close();
-                }, 50);
+            } else {
+                 updateStatus('No active_chats found in URL.', '');
             }
         })();
+
+
+        // --- Listen for postMessage command for selected chat messages ---
+        window.addEventListener('message', (event) => {
+            // Learn and verify the origin on the first message
+            if (!allowedOpenerOrigin) {
+                 // **FIX:** Directly use the event origin as the initial allowed origin
+                 allowedOpenerOrigin = event.origin;
+                 console.log("Setting allowed opener origin:", allowedOpenerOrigin);
+                 // **FIX:** Check if the source is the opener, otherwise ignore
+                 if (event.source !== window.opener) {
+                     console.warn("Ignoring message because source is not the window opener.");
+                     return;
+                 }
+            }
+
+            // **FIX:** Simplified security check: Only check if the origin matches the learned origin.
+            // Don't try to access properties of event.source or window.opener here,
+            // as that's what triggers the SecurityError.
+            if (event.origin !== allowedOpenerOrigin) {
+                console.warn(`Message blocked. Origin: ${event.origin}. Expected opener from ${allowedOpenerOrigin}`);
+                updateStatus(`Blocked message from invalid origin: ${event.origin}`, 'error');
+                return;
+            }
+
+            // Process the command
+            const command = event.data;
+            // Expecting: { action: 'setChatMessages', chatId: '...', messagesValue: '...' }
+            if (command && command.action === 'setChatMessages' && command.chatId && command.messagesValue) {
+                try {
+                    // messagesValue is already URI encoded by the sender
+                    setCookie(command.chatId, command.messagesValue);
+                    // Close the window after successfully processing the message
+                     setTimeout(() => { window.close(); }, 50); // Short delay before closing
+
+                } catch (e) {
+                    console.error("Bridge Error setting chat messages cookie:", e);
+                    updateStatus(`Error setting cookie "${command.chatId}": ${e.message}`, 'error');
+                }
+            } else {
+                 console.warn("Received invalid command via postMessage:", command);
+                 updateStatus('Received invalid command structure via postMessage.', 'error');
+            }
+        });
+
+        console.log('Sender bridge initialized. Set active_chats from URL and listening for postMessage.');
+        updateStatus('Bridge ready. Waiting for chat messages...');
+
+         // Optional: Announce readiness to parent AFTER setting origin
+         // (More complex handshake needed to ensure parent is ready to receive)
+
     </script>
 </body>
 </html>
