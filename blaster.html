@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostMessage Blaster</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        .blasting { animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(100, 116, 139, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+        }
+    </style>
+</head>
+<body class="p-6 h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-slate-500 flex flex-col items-center">
+        <div id="statusIndicator" class="blasting w-12 h-12 bg-slate-500 rounded-full mb-4 flex items-center justify-center text-white font-bold">
+            0
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">
+            PostMessage Blaster Active
+        </h1>
+        <p class="text-sm text-gray-600 mb-6 text-center">
+            This script is sending a message to its parent window every 1 second.
+        </p>
+        
+        <div class="bg-gray-100 p-4 rounded-lg w-full">
+            <h2 class="text-sm font-semibold text-gray-700 mb-1">Message Counter:</h2>
+            <pre id="counterOutput" class="text-lg font-mono text-slate-700">0</pre>
+            <h2 class="text-sm font-semibold text-gray-700 mt-3 mb-1">Target:</h2>
+            <pre class="text-xs font-mono text-gray-500">window.parent.postMessage(..., '*')</pre>
+        </div>
+    </div>
+
+    <script>
+        let messageCount = 0;
+        const intervalTime = 1000; // 1 second
+        const statusIndicator = document.getElementById('statusIndicator');
+        const counterOutput = document.getElementById('counterOutput');
+        
+        // This runs only if the page is loaded inside an iframe.
+        if (window.parent && window.parent !== window) {
+            
+            // Function to send a message
+            function sendHeartbeat() {
+                messageCount++;
+                
+                const payload = {
+                    type: "HEARTBEAT",
+                    count: messageCount,
+                    timestamp: new Date().toISOString(),
+                    senderOrigin: window.location.origin 
+                };
+
+                try {
+                    // Send the message as a stringified JSON object
+                    // We use '*' as the targetOrigin for testing simplicity.
+                    window.parent.postMessage(JSON.stringify(payload), '*');
+                    
+                    // Update the UI
+                    statusIndicator.textContent = messageCount;
+                    counterOutput.textContent = messageCount;
+
+                    // Log the send in the iframe's console (for debugging the sender side)
+                    console.log(`[Blaster] Message Sent #${messageCount}`);
+
+                } catch (e) {
+                    console.error("PostMessage Failed. Is the parent accessible?", e);
+                    clearInterval(heartbeatInterval);
+                }
+            }
+
+            // Start sending messages every 1 second
+            const heartbeatInterval = setInterval(sendHeartbeat, intervalTime);
+            sendHeartbeat(); // Send the first one immediately
+
+        } else {
+            // Display error if not running in an iframe
+            statusIndicator.textContent = 'X';
+            statusIndicator.classList.remove('blasting', 'bg-slate-500');
+            statusIndicator.classList.add('bg-red-500');
+            counterOutput.textContent = 'Not running in iframe.';
+            console.warn("Blaster not active: This page must be loaded inside an iframe to send messages.");
+        }
+    </script>
+</body>
+</html>
