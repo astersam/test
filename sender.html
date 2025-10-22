@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Message Sender Bridge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
+    </style>
+</head>
+<body class="p-6 flex flex-col items-center min-h-screen">
+    <div id="status-card" class="w-full max-w-lg p-6 bg-white rounded-xl shadow-2xl border-t-4 border-blue-500 transition-all duration-300">
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-4">Cookie Setter Status</h1>
+        <p id="message-status" class="text-lg text-gray-600 mb-4">Reading URL parameters...</p>
+        <div id="data-display" class="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 font-mono overflow-auto max-h-40"></div>
+    </div>
+
+    <script>
+        const BRIDGE_COOKIE_NAME = 'bridge_data';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const sender = urlParams.get('sender');
+        const type = urlParams.get('type');
+        const message = urlParams.get('message');
+
+        const statusElement = document.getElementById('message-status');
+        const displayElement = document.getElementById('data-display');
+        const cardElement = document.getElementById('status-card');
+
+        if (sender && type && message) {
+            try {
+                // 1. Construct the payload
+                const payload = {
+                    sender: sender,
+                    type: type,
+                    message: message,
+                    timestamp: Date.now()
+                };
+                
+                const jsonPayload = JSON.stringify(payload);
+                const encodedPayload = encodeURIComponent(jsonPayload);
+
+                // 2. Set the cross-site cookie
+                // REQUIRED for cross-site iframe reading: SameSite=None; Secure
+                document.cookie = `${BRIDGE_COOKIE_NAME}=${encodedPayload}; SameSite=None; Secure; Path=/; Max-Age=3600`;
+
+                // 3. Update status in the UI
+                statusElement.textContent = `✅ Success! New message written to cookie "${BRIDGE_COOKIE_NAME}".`;
+                cardElement.classList.replace('border-blue-500', 'border-green-500');
+
+                displayElement.innerHTML = `
+                    <p><strong>Raw Cookie Value:</strong> ${encodedPayload.substring(0, 80)}...</p>
+                    <p><strong>JSON Payload:</strong></p>
+                    <pre class="whitespace-pre-wrap">${JSON.stringify(payload, null, 2)}</pre>
+                    <p class="mt-2 text-xs text-red-600">Note: This cookie requires HTTPS and SameSite=None to work in the receiver iframe.</p>
+                `;
+
+            } catch (error) {
+                statusElement.textContent = `❌ Error setting cookie: ${error.message}`;
+                cardElement.classList.replace('border-blue-500', 'border-red-500');
+                console.error("Cookie setting error:", error);
+            }
+        } else {
+            statusElement.textContent = 'Awaiting URL parameters...';
+            displayElement.innerHTML = `
+                <p>Please use the following format in the URL:</p>
+                <code class="block mt-2 p-2 bg-yellow-100 rounded-md">?sender=Alice&type=Notification&message=Hello</code>
+            `;
+            cardElement.classList.replace('border-blue-500', 'border-yellow-500');
+        }
+    </script>
+</body>
+</html>
