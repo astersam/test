@@ -42,7 +42,6 @@
                 const encodedPayload = encodeURIComponent(jsonPayload);
 
                 // 2. Set the cross-site cookie
-                // REQUIRED for cross-site iframe reading: SameSite=None; Secure
                 document.cookie = `${BRIDGE_COOKIE_NAME}=${encodedPayload}; SameSite=None; Secure; Path=/; Max-Age=3600`;
 
                 // 3. Update status in the UI
@@ -55,6 +54,10 @@
                     <pre class="whitespace-pre-wrap">${JSON.stringify(payload, null, 2)}</pre>
                     <p class="mt-2 text-xs text-red-600">Note: This cookie requires HTTPS and SameSite=None to work in the receiver iframe.</p>
                 `;
+
+                // 4. CRITICAL FIX: Close the window immediately after successful execution
+                // This works because the window is closing itself (First-Party)
+                window.close(); 
 
             } catch (error) {
                 statusElement.textContent = `❌ Error setting cookie: ${error.message}`;
