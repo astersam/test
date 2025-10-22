@@ -13,11 +13,12 @@
         const senderId = urlParams.get('senderId');
         
         // ** THE FIX IS HERE (PART 1) **
-        // The receiver now provides its origin, which we will use as the target.
+        // The receiver now provides its origin, which we will use as the secure "return address".
         const parentOrigin = urlParams.get('origin');
 
         if (messageToSend && senderId) {
             // --- SENDER MODE ---
+            // This part is unchanged. It saves the message and closes.
             const messageData = {
                 payload: messageToSend,
                 senderId: senderId,
@@ -32,6 +33,7 @@
 
         } else if (parentOrigin) {
             // --- RECEIVER MODE ---
+            // This logic now runs when a "return address" is provided.
             const targetWindow = window.opener || window.parent;
 
             if (targetWindow && targetWindow !== window) {
@@ -39,8 +41,8 @@
                     const storedData = localStorage.getItem(MESSAGE_KEY);
                     if (storedData) {
                         // ** THE FIX IS HERE (PART 2) **
-                        // We use the provided parentOrigin as the target origin for postMessage.
-                        // This is secure and avoids the error.
+                        // We use the provided parentOrigin as the target for postMessage.
+                        // This is secure and tells the browser exactly where the message should go, resolving the error.
                         targetWindow.postMessage(storedData, parentOrigin);
                     }
                 } catch (e) {
@@ -48,6 +50,7 @@
                 }
             }
             
+            // Close the window if it was a popup.
             if (window.opener) {
                 window.close();
             }
