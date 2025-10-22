@@ -3,39 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <title>Sender Bridge</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f0f0; padding: 1em; }
+        #status { padding: 0.5em; background-color: #e0e0e0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
 </head>
 <body>
-    <!-- This page is a transactional bridge. It performs one action and closes. -->
+    <h1>Sender Bridge Window</h1>
+    <p>This window receives commands to set cookies.</p>
+    <div id="status">Status: Waiting for commands...</div>
+
     <script>
+        const statusDiv = document.getElementById('status');
+        let allowedOrigin = null; // We'll set this on the first valid message
+
         // Helper function to set a cookie.
         function setCookie(name, value, days = 1) {
-            const encodedValue = encodeURIComponent(value);
+            // Value is expected to be URI encoded already by the parent
             const date = new Date();
             date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
             const expires = "expires=" + date.toUTCString();
-            document.cookie = `${name}=${encodedValue}; ${expires}; SameSite=None; Secure; Path=/`;
+            document.cookie = `${name}=${value}; ${expires}; SameSite=None; Secure; Path=/`;
+            console.log(`Cookie set: ${name}`);
+            updateStatus(`Cookie set: ${name}`, 'success');
         }
 
-        (function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const cookieName = urlParams.get('name');
-            const cookieValue = urlParams.get('value'); // This should be a pre-encoded JSON string
+        function updateStatus(message, type = '') {
+            statusDiv.textContent = message;
+            statusDiv.className = type; // 'success' or 'error' or ''
+             // Auto-clear status after a few seconds
+            setTimeout(() => {
+                 if (statusDiv.textContent === message) { // Only clear if it hasn't changed
+                    statusDiv.textContent = 'Status: Waiting for commands...';
+                    statusDiv.className = '';
+                 }
+            }, 3000);
+        }
 
-            if (cookieName && cookieValue) {
+        // Listen for messages from the parent window (bookmarklet)
+        window.addEventListener('message', (event) => {
+            // IMPORTANT SECURITY: On the very first message, learn the opener's origin.
+            // After that, only accept messages from that specific origin.
+            if (!allowedOrigin) {
+                 // Basic check: Allow localhost or potentially others in the future
+                 // More robust check might involve a specific expected origin list
+                 allowedOrigin = event.origin;
+                 console.log("Setting allowed origin:", allowedOrigin);
+            }
+
+            if (event.origin !== allowedOrigin) {
+                console.warn(`Message blocked from unexpected origin: ${event.origin}. Expected: ${allowedOrigin}`);
+                updateStatus(`Blocked message from ${event.origin}`, 'error');
+                return;
+            }
+
+            // Process the command
+            const command = event.data;
+            if (command && command.action === 'setCookie' && command.name && command.value) {
                 try {
-                    // Set the cookie with the provided name and value
-                    setCookie(cookieName, cookieValue);
+                    setCookie(command.name, command.value);
                 } catch (e) {
-                    console.error("Bridge Sender Error:", e);
-                } finally {
-                    setTimeout(() => {
-                        window.close();
-                    }, 50);
+                    console.error("Bridge Error setting cookie:", e);
+                    updateStatus(`Error setting cookie "${command.name}": ${e.message}`, 'error');
                 }
             } else {
-                window.close();
+                 console.warn("Received invalid command:", command);
+                 updateStatus('Received invalid command structure.', 'error');
             }
-        })();
+        });
+
+        updateStatus('Bridge ready.');
+        console.log('Sender bridge initialized and listening for postMessage commands.');
+
+         // Optional: Announce readiness to parent if opened as popup
+        if (window.opener && !window.opener.closed) {
+             // We don't know the opener's origin yet, so use '*' initially,
+             // but subsequent communication should use the learned allowedOrigin
+             //window.opener.postMessage('__SENDER_BRIDGE_READY__', '*');
+        }
+
     </script>
 </body>
 </html>
