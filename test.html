@@ -19,6 +19,7 @@
             border-bottom: 1px dotted #eee;
         }
         #status { font-weight: bold; }
+        .log { font-size: 0.8em; color: #666; }
     </style>
 </head>
 <body>
@@ -33,19 +34,34 @@
         let messageCount = 0;
         let allowedOrigin = null;
 
+        console.log('Test receiver script started. Adding message listener...');
+
         window.addEventListener('message', (event) => {
+            console.log('>>> Message event fired <<<'); // Log that the listener was triggered
+
             // Learn the allowed origin on the first message
             if (!allowedOrigin) {
                  allowedOrigin = event.origin;
-                 console.log("Setting allowed origin:", allowedOrigin);
+                 console.log(`Setting allowed origin based on first message: ${allowedOrigin}`);
                  statusDiv.textContent = `Status: Receiving messages from ${allowedOrigin}`;
             }
 
+            console.log(`Received message origin: ${event.origin}`);
+            console.log(`Expected origin (allowedOrigin): ${allowedOrigin}`);
+
             // Only accept messages from the learned origin
             if (event.origin !== allowedOrigin) {
-                console.warn(`Message blocked from unexpected origin: ${event.origin}. Expected: ${allowedOrigin}`);
+                console.warn(`Message blocked! Origin mismatch. Expected ${allowedOrigin} but got ${event.origin}.`);
+                // Add a visual indicator in the message list
+                const blockedLi = document.createElement('li');
+                blockedLi.textContent = `[${new Date().toLocaleTimeString()}] Blocked message from origin: ${event.origin}`;
+                blockedLi.style.color = 'red';
+                messagesList.appendChild(blockedLi);
+                messagesList.scrollTop = messagesList.scrollHeight;
                 return;
             }
+
+            console.log(`Origin check passed. Message data: ${event.data}`);
 
             // Display the message
             const newMessageLi = document.createElement('li');
@@ -53,12 +69,12 @@
             messagesList.appendChild(newMessageLi);
             messagesList.scrollTop = messagesList.scrollHeight; // Scroll to bottom
             messageCount++;
-            // Optional: Update status with count if needed
-            // statusDiv.textContent = `Status: Receiving messages from ${allowedOrigin} (${messageCount} received)`;
+            console.log('Message displayed successfully.');
 
         });
 
-        console.log('Test receiver initialized.');
+        console.log('Test receiver initialized. Listener is active.');
     </script>
 </body>
 </html>
+
