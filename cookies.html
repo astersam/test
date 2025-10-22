@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cookie Bridge Sender</title>
+</head>
+<body>
+    <!-- This page is intended to run as an invisible iframe. -->
+    <script>
+        // --- Configuration ---
+        const BRIDGE_COOKIE_NAME = 'bridge_data';
+        const MESSAGE_KEY = 'bridge-cookie-message'; // Key to identify the message in the parent
+
+        // Function to extract a specific cookie value by name
+        function getCookie(name) {
+            // Document.cookie returns a string like "key1=value1; key2=value2"
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for(let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length); // Trim leading spaces
+                if (c.indexOf(nameEQ) === 0) {
+                    // Cookie found, return the decoded value
+                    return decodeURIComponent(c.substring(nameEQ.length, c.length));
+                }
+            }
+            return null;
+        }
+
+        // --- Main Execution ---
+        if (window.parent && window.parent !== window) {
+            const cookieValue = getCookie(BRIDGE_COOKIE_NAME);
+            
+            if (cookieValue) {
+                // The data is prefixed with the key and sent as a string to the parent.
+                const message = `${MESSAGE_KEY}:${cookieValue}`;
+                
+                // Sending the message. Using '*' as requested for maximum compatibility.
+                window.parent.postMessage(message, '*');
+                
+                console.log('✅ Cookie data sent to parent via postMessage.');
+                console.log('Sent Data:', cookieValue);
+
+            } else {
+                const message = `${MESSAGE_KEY}:NO_COOKIE_FOUND`;
+                window.parent.postMessage(message, '*');
+                console.warn(`🛑 Cookie '${BRIDGE_COOKIE_NAME}' not found in this context. Ensure it was set with 'SameSite=None; Secure'.`);
+            }
+        } else {
+            console.error("This script must be run inside an iframe (or a pop-up) to communicate with a parent window.");
+        }
+    </script>
+</body>
+</html>
