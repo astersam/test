@@ -5,20 +5,19 @@
     <title>Communication Bridge</title>
 </head>
 <body>
-    <!-- 
-        This page acts as a transactional bridge hosted on GitHub Pages.
-        It has two modes based on the URL parameters.
-    -->
     <script>
         const MESSAGE_KEY = 'github-cross-page-bridge-message';
 
         const urlParams = new URLSearchParams(window.location.search);
         const messageToSend = urlParams.get('message');
         const senderId = urlParams.get('senderId');
+        
+        // ** THE FIX IS HERE (PART 1) **
+        // The receiver now provides its origin, which we will use as the target.
+        const parentOrigin = urlParams.get('origin');
 
         if (messageToSend && senderId) {
-            // --- SENDER MODE (via Pop-up) ---
-            // A message was found in the URL. Save it to localStorage and close.
+            // --- SENDER MODE ---
             const messageData = {
                 payload: messageToSend,
                 senderId: senderId,
@@ -27,32 +26,28 @@
             try {
                 localStorage.setItem(MESSAGE_KEY, JSON.stringify(messageData));
             } catch (e) {
-                // This can happen in sandboxed environments.
-                console.error('Bridge Error (Send): Could not write to localStorage.', e);
+                console.error('Bridge Error (Send):', e);
             }
-            // Close the window after attempting the operation.
             window.close();
 
-        } else {
-            // --- RECEIVER MODE (via iFrame or Pop-up) ---
-            // This mode can be triggered by a popup or an iframe.
-            // We need to find the correct window to send the message back to.
+        } else if (parentOrigin) {
+            // --- RECEIVER MODE ---
             const targetWindow = window.opener || window.parent;
 
             if (targetWindow && targetWindow !== window) {
                 try {
                     const storedData = localStorage.getItem(MESSAGE_KEY);
                     if (storedData) {
-                        // Send the found data back to the window that opened/embedded this page.
-                        targetWindow.postMessage(storedData, '*');
+                        // ** THE FIX IS HERE (PART 2) **
+                        // We use the provided parentOrigin as the target origin for postMessage.
+                        // This is secure and avoids the error.
+                        targetWindow.postMessage(storedData, parentOrigin);
                     }
                 } catch (e) {
-                    console.error('Bridge Error (Receive): Could not read or post message.', e);
+                    console.error('Bridge Error (Receive):', e);
                 }
             }
             
-            // We only close if this was opened as a popup (i.e., has an opener).
-            // An iframe doesn't need to be closed.
             if (window.opener) {
                 window.close();
             }
