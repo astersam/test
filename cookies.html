@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Cookie Bridge Sender</title>
+    <title>2 Cookie Bridge Sender</title>
 </head>
 <body>
     <!-- This page is intended to run as an invisible iframe. -->
@@ -10,6 +10,11 @@
         // --- Configuration ---
         const BRIDGE_COOKIE_NAME = 'bridge_data';
         const MESSAGE_KEY = 'bridge-cookie-message'; // Key to identify the message in the parent
+        const POLLING_INTERVAL_MS = 500; // Check every half second
+
+        // State variable to track the last value sent to the parent
+        let lastSentValue = null; 
+        let intervalId;
 
         // Function to extract a specific cookie value by name
         function getCookie(name) {
@@ -27,27 +32,53 @@
             return null;
         }
 
-        // --- Main Execution ---
-        if (window.parent && window.parent !== window) {
-            const cookieValue = getCookie(BRIDGE_COOKIE_NAME);
-            
-            if (cookieValue) {
-                // The data is prefixed with the key and sent as a string to the parent.
-                const message = `${MESSAGE_KEY}:${cookieValue}`;
-                
-                // Sending the message. Using '*' as requested for maximum compatibility.
-                window.parent.postMessage(message, '*');
-                
-                console.log('✅ Cookie data sent to parent via postMessage.');
-                console.log('Sent Data:', cookieValue);
-
-            } else {
-                const message = `${MESSAGE_KEY}:NO_COOKIE_FOUND`;
-                window.parent.postMessage(message, '*');
-                console.warn(`🛑 Cookie '${BRIDGE_COOKIE_NAME}' not found in this context. Ensure it was set with 'SameSite=None; Secure'.`);
+        // --- Polling and Sending Logic ---
+        function checkCookieAndSend() {
+            if (!window.parent || window.parent === window) {
+                // Stop polling if the iframe is somehow detached or closed
+                console.error("Polling detected outside of an iframe context. Stopping interval.");
+                clearInterval(intervalId);
+                return;
             }
+
+            const currentCookieValue = getCookie(BRIDGE_COOKIE_NAME);
+
+            // 1. Check if the value has changed since the last time we checked
+            if (currentCookieValue !== lastSentValue) {
+                
+                // 2. Prepare the message
+                let message;
+                if (currentCookieValue) {
+                    // Cookie found, send the actual value
+                    message = `${MESSAGE_KEY}:${currentCookieValue}`;
+                    console.log('✅ Cookie data updated and sent to parent.');
+                    console.log('New Data:', currentCookieValue);
+                } else {
+                    // Cookie was either not present or was explicitly cleared
+                    message = `${MESSAGE_KEY}:COOKIE_CLEARED_OR_NOT_FOUND`;
+                    // Only warn if the last sent value wasn't null (i.e., we had data before and lost it)
+                    if (lastSentValue !== null) {
+                        console.warn(`🛑 Cookie '${BRIDGE_COOKIE_NAME}' cleared or not found. Sending clear signal.`);
+                    }
+                }
+                
+                // 3. Send the message and update state
+                window.parent.postMessage(message, '*');
+                lastSentValue = currentCookieValue; // Update state tracking
+            }
+        }
+
+        // --- Main Execution (Start Polling) ---
+        if (window.parent && window.parent !== window) {
+            // Check and send immediately on load to get the current state
+            checkCookieAndSend(); 
+            
+            // Set up the continuous polling loop
+            intervalId = setInterval(checkCookieAndSend, POLLING_INTERVAL_MS);
+            console.log(`✅ Bridge initialized. Starting ${POLLING_INTERVAL_MS}ms polling for cookie changes.`);
+            
         } else {
-            console.error("This script must be run inside an iframe (or a pop-up) to communicate with a parent window.");
+            console.error("This script must be run inside an iframe to function as a bridge.");
         }
     </script>
 </body>
