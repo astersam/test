@@ -2,76 +2,67 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Message Sender Bridge</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
-    </style>
+    <title>Sender Bridge</title>
 </head>
-<body class="p-6 flex flex-col items-center min-h-screen">
-    <div id="status-card" class="w-full max-w-lg p-6 bg-white rounded-xl shadow-2xl border-t-4 border-blue-500 transition-all duration-300">
-        <h1 class="text-3xl font-extrabold text-gray-800 mb-4">Cookie Setter Status</h1>
-        <p id="message-status" class="text-lg text-gray-600 mb-4">Reading URL parameters...</p>
-        <div id="data-display" class="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 font-mono overflow-auto max-h-40"></div>
-    </div>
-
+<body>
+    <!-- This page is a transactional bridge. It performs one action and closes. -->
     <script>
-        const BRIDGE_COOKIE_NAME = 'bridge_data';
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const sender = urlParams.get('sender');
-        const type = urlParams.get('type');
-        const message = urlParams.get('message');
-
-        const statusElement = document.getElementById('message-status');
-        const displayElement = document.getElementById('data-display');
-        const cardElement = document.getElementById('status-card');
-
-        if (sender && type && message) {
-            try {
-                // 1. Construct the payload
-                const payload = {
-                    sender: sender,
-                    type: type,
-                    message: message,
-                    timestamp: Date.now()
-                };
-                
-                const jsonPayload = JSON.stringify(payload);
-                const encodedPayload = encodeURIComponent(jsonPayload);
-
-                // 2. Set the cross-site cookie
-                document.cookie = `${BRIDGE_COOKIE_NAME}=${encodedPayload}; SameSite=None; Secure; Path=/; Max-Age=3600`;
-
-                // 3. Update status in the UI
-                statusElement.textContent = `✅ Success! New message written to cookie "${BRIDGE_COOKIE_NAME}".`;
-                cardElement.classList.replace('border-blue-500', 'border-green-500');
-
-                displayElement.innerHTML = `
-                    <p><strong>Raw Cookie Value:</strong> ${encodedPayload.substring(0, 80)}...</p>
-                    <p><strong>JSON Payload:</strong></p>
-                    <pre class="whitespace-pre-wrap">${JSON.stringify(payload, null, 2)}</pre>
-                    <p class="mt-2 text-xs text-red-600">Note: This cookie requires HTTPS and SameSite=None to work in the receiver iframe.</p>
-                `;
-
-                // 4. CRITICAL FIX: Close the window immediately after successful execution
-                // This works because the window is closing itself (First-Party)
-                window.close(); 
-
-            } catch (error) {
-                statusElement.textContent = `❌ Error setting cookie: ${error.message}`;
-                cardElement.classList.replace('border-blue-500', 'border-red-500');
-                console.error("Cookie setting error:", error);
-            }
-        } else {
-            statusElement.textContent = 'Awaiting URL parameters...';
-            displayElement.innerHTML = `
-                <p>Please use the following format in the URL:</p>
-                <code class="block mt-2 p-2 bg-yellow-100 rounded-md">?sender=Alice&type=Notification&message=Hello</code>
-            `;
-            cardElement.classList.replace('border-blue-500', 'border-yellow-500');
+        // Helper function to set a cookie.
+        // All cookies are set on the parent domain (e.g., .github.io)
+        // This requires SameSite=None and Secure.
+        function setCookie(name, value, days = 1) {
+            const encodedValue = encodeURIComponent(value);
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            const expires = "expires=" + date.toUTCString();
+            document.cookie = `${name}=${encodedValue}; ${expires}; SameSite=None; Secure; Path=/`;
         }
+
+        // --- Main Logic ---
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+
+            try {
+                if (action === 'update_active_chats') {
+                    // 1. Build the list of chats from chat_1, chat_2, etc.
+                    const chats = [];
+                    for (const [key, value] of urlParams.entries()) {
+                        if (key.startsWith('chat_')) {
+                            chats.push(value);
+                        }
+                    }
+                    setCookie('active_chats', JSON.stringify(chats));
+
+                } else if (action === 'fetch_chat') {
+                    // 2. Set a cookie named after the chat_id
+                    const chatId = urlParams.get('chat_id');
+                    const messages = urlParams.get('messages'); // This is an encoded JSON string
+                    if (chatId && messages) {
+                        // The message is already encoded, but the cookie value itself must be encoded.
+                        // We will just pass the pre-encoded message string.
+                        setCookie(chatId, messages); 
+                    }
+
+                } else if (action === 'new_message') {
+                    // 3. Set a cookie for the last message
+                    const chatId = urlParams.get('chat_id');
+                    const message = urlParams.get('message'); // This is an encoded JSON string
+                    if (chatId && message) {
+                        const cookieName = `last_message_${chatId}`;
+                        setCookie(cookieName, message);
+                    }
+                }
+            } catch (e) {
+                console.error("Bridge Sender Error:", e);
+            } finally {
+                // Close the window after a tiny delay to ensure cookie is set.
+                setTimeout(() => {
+                    window.close();
+                }, 50);
+            }
+        })();
     </script>
 </body>
 </html>
+
