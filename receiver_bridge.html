@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communication Bridge (PostMessage Fix)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #1a202c; }
+        .pulse-effect {
+            animation: pulse-slow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="p-6 h-screen flex items-center justify-center">
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border-t-4 border-teal-500">
+        <h1 class="text-3xl font-extrabold text-teal-400 mb-4 border-b border-gray-700 pb-2">
+            📡 Continuous PostMessage Bridge
+        </h1>
+        <p class="text-sm text-gray-400 mb-6">
+            This page is running inside an iframe. It monitors <code>localStorage</code> and sends new data to its parent via <code>postMessage</code> immediately upon change.
+        </p>
+        
+        <div id="latestMessageCard" class="bg-gray-700 p-4 rounded-lg">
+            <h2 class="text-lg font-semibold text-teal-300 mb-2">Bridge Status:</h2>
+            <pre id="messageOutput" class="text-sm text-gray-200 whitespace-pre-wrap">Checking for parent window...</pre>
+        </div>
+
+        <div id="statusIndicator" class="mt-4 text-xs font-mono text-gray-500 flex items-center">
+            <span id="pollingStatus" class="pulse-effect w-3 h-3 rounded-full bg-green-500 mr-2"></span>
+            Polling initiated. Interval: 500ms.
+        </div>
+    </div>
+
+    <script>
+        const MESSAGE_KEY = 'cross-page-communication-data';
+        const POLLING_INTERVAL = 500;
+        const messageOutput = document.getElementById('messageOutput');
+        let lastReceivedJson = null;
+
+        // Check if this page is running inside a frame (not the top window)
+        const isIframed = (window.parent && window.parent !== window);
+        
+        if (!isIframed) {
+            messageOutput.textContent = 'STATUS: Not running in an iframe. Polling is inactive.';
+            document.getElementById('pollingStatus').classList.remove('bg-green-500');
+            document.getElementById('pollingStatus').classList.add('bg-red-500');
+        } else {
+            // FIX 1: Send initial data immediately if it exists
+            const initialJson = localStorage.getItem(MESSAGE_KEY);
+            if (initialJson) {
+                try {
+                    // Send the raw JSON string to the parent
+                    window.parent.postMessage(initialJson, '*');
+                    lastReceivedJson = initialJson;
+                    const messageData = JSON.parse(initialJson);
+                    messageOutput.textContent = 
+                        `SUCCESS: Initial message bridged upon load at ${new Date().toLocaleTimeString()}\n` +
+                        `Content (Snippet): ${messageData.payload ? messageData.payload.substring(0, 50) + '...' : 'N/A'}`;
+                    console.log('--- 📨 PostMessage Sent (Initial Load) ---', messageData);
+                } catch (e) {
+                    messageOutput.textContent = `ERROR: Initial postMessage failed. ${e.message}`;
+                    console.error('❌ Initial postMessage failure:', e);
+                }
+            } else {
+                messageOutput.textContent = 'STATUS: Polling active. LocalStorage key is empty.';
+            }
+
+            console.log('✅ Bridge initialized. Starting 500ms polling for LocalStorage changes.');
+            // FIX 2: Start the continuous polling loop to catch future changes
+            setInterval(checkLocalStorageAndPost, POLLING_INTERVAL);
+        }
+
+        function checkLocalStorageAndPost() {
+            if (!isIframed) return;
+
+            const currentJson = localStorage.getItem(MESSAGE_KEY);
+            
+            // Send if data exists AND it is different from the last data we sent
+            if (currentJson && currentJson !== lastReceivedJson) {
+                lastReceivedJson = currentJson; // Update the record of the last message sent
+                
+                try {
+                    // This is the core postMessage fix: explicitly sending the message
+                    // from the iframe (window.parent) to the parent window
+                    const targetOrigin = '*'; 
+                    window.parent.postMessage(currentJson, targetOrigin);
+
+                    // Log execution status on the bridge page's console
+                    const messageData = JSON.parse(currentJson);
+                    messageOutput.textContent = 
+                        `SUCCESS: New message bridged at ${new Date().toLocaleTimeString()}\n` +
+                        `Content (Snippet): ${messageData.payload ? messageData.payload.substring(0, 50) + '...' : 'N/A'}`;
+                    console.log('--- 📨 PostMessage Sent (New Data) ---', messageData);
+
+                } catch (e) {
+                    messageOutput.textContent = `ERROR: Failed to send postMessage. ${e.message}`;
+                    console.error('❌ postMessage failure:', e);
+                }
+            } else if (!currentJson && lastReceivedJson !== null) {
+                // Handle cleared storage
+                lastReceivedJson = null;
+                messageOutput.textContent = 'STATUS: LocalStorage key cleared. Ready for next message.';
+                console.log('LocalStorage bridge key cleared.');
+            }
+        }
+    </script>
+</body>
+</html>
