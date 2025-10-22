@@ -2,83 +2,52 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Cookie Bridge Receiver</title>
+    <title>Receiver Bridge</title>
 </head>
 <body>
-    <!-- This page is intended to run as an invisible iframe. -->
+    <!-- This page runs in a hidden iframe and acts as a secure data fetcher. -->
     <script>
-        // --- Configuration ---
-        const BRIDGE_COOKIE_NAME = 'bridge_data';
-        const MESSAGE_KEY = 'bridge-cookie-message'; // Key to identify the message in the parent
-        const POLLING_INTERVAL_MS = 500; // Check every half second
-
-        // State variable to track the last value sent to the parent
-        let lastSentValue = null; 
-        let intervalId;
-
-        // Function to extract a specific cookie value by name
+        // Helper function to read a specific cookie
         function getCookie(name) {
-            // Document.cookie returns a string like "key1=value1; key2=value2"
             const nameEQ = name + "=";
             const ca = document.cookie.split(';');
             for(let i = 0; i < ca.length; i++) {
                 let c = ca[i];
-                while (c.charAt(0) === ' ') c = c.substring(1, c.length); // Trim leading spaces
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
                 if (c.indexOf(nameEQ) === 0) {
-                    // Cookie found, return the decoded value
                     return decodeURIComponent(c.substring(nameEQ.length, c.length));
                 }
             }
             return null;
         }
 
-        // --- Polling and Sending Logic ---
-        function checkCookieAndSend() {
-            if (!window.parent || window.parent === window) {
-                // Stop polling if the iframe is somehow detached or closed
-                console.error("Polling detected outside of an iframe context. Stopping interval.");
-                clearInterval(intervalId);
+        // Listen for requests from the parent window (the receiver bookmarklet)
+        window.addEventListener('message', (event) => {
+            // Do not process messages from other windows
+            if (event.source !== window.parent) {
                 return;
             }
 
-            const currentCookieValue = getCookie(BRIDGE_COOKIE_NAME);
-
-            // 1. Check if the value has changed since the last time we checked
-            if (currentCookieValue !== lastSentValue) {
+            const command = event.data;
+            if (command && typeof command === 'string' && command.startsWith('getCookie:')) {
+                const cookieName = command.split(':')[1];
+                const cookieValue = getCookie(cookieName);
                 
-                // 2. Prepare the message
-                let message;
-                if (currentCookieValue) {
-                    // Cookie found, send the actual value
-                    message = `${MESSAGE_KEY}:${currentCookieValue}`;
-                    console.log('✅ Cookie data updated and sent to parent.');
-                    console.log('New Data:', currentCookieValue);
-                } else {
-                    // Cookie was either not present or was explicitly cleared
-                    message = `${MESSAGE_KEY}:COOKIE_CLEARED_OR_NOT_FOUND`;
-                    // Only warn if the last sent value wasn't null (i.e., we had data before and lost it)
-                    if (lastSentValue !== null) {
-                        console.warn(`🛑 Cookie '${BRIDGE_COOKIE_NAME}' cleared or not found. Sending clear signal.`);
-                    }
-                }
+                // Send the result (even if null) back to the parent.
+                // We include the cookieName in the response so the parent knows what this is.
+                const response = {
+                    cookieName: cookieName,
+                    cookieValue: cookieValue
+                };
                 
-                // 3. Send the message and update state
-                window.parent.postMessage(message, '*');
-                lastSentValue = currentCookieValue; // Update state tracking
+                // Send the data to the parent window, specifying its origin
+                window.parent.postMessage(JSON.stringify(response), event.origin);
             }
-        }
+        });
 
-        // --- Main Execution (Start Polling) ---
+        // Announce that the bridge is ready
         if (window.parent && window.parent !== window) {
-            // Check and send immediately on load to get the current state
-            checkCookieAndSend(); 
-            
-            // Set up the continuous polling loop
-            intervalId = setInterval(checkCookieAndSend, POLLING_INTERVAL_MS);
-            console.log(`✅ Bridge initialized. Starting ${POLLING_INTERVAL_MS}ms polling for cookie changes.`);
-            
-        } else {
-            console.error("This script must be run inside an iframe to function as a bridge.");
+            window.parent.postMessage('__BRIDGE_READY__', '*');
         }
     </script>
 </body>
