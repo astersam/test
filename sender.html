@@ -8,8 +8,6 @@
     <!-- This page is a transactional bridge. It performs one action and closes. -->
     <script>
         // Helper function to set a cookie.
-        // All cookies are set on the parent domain (e.g., .github.io)
-        // This requires SameSite=None and Secure.
         function setCookie(name, value, days = 1) {
             const encodedValue = encodeURIComponent(value);
             const date = new Date();
@@ -18,48 +16,24 @@
             document.cookie = `${name}=${encodedValue}; ${expires}; SameSite=None; Secure; Path=/`;
         }
 
-        // --- Main Logic ---
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
-            const action = urlParams.get('action');
+            const cookieName = urlParams.get('name');
+            const cookieValue = urlParams.get('value'); // This should be a pre-encoded JSON string
 
-            try {
-                if (action === 'update_active_chats') {
-                    // 1. Build the list of chats from chat_1, chat_2, etc.
-                    const chats = [];
-                    for (const [key, value] of urlParams.entries()) {
-                        if (key.startsWith('chat_')) {
-                            chats.push(value);
-                        }
-                    }
-                    setCookie('active_chats', JSON.stringify(chats));
-
-                } else if (action === 'fetch_chat') {
-                    // 2. Set a cookie named after the chat_id
-                    const chatId = urlParams.get('chat_id');
-                    const messages = urlParams.get('messages'); // This is an encoded JSON string
-                    if (chatId && messages) {
-                        // The message is already encoded, but the cookie value itself must be encoded.
-                        // We will just pass the pre-encoded message string.
-                        setCookie(chatId, messages); 
-                    }
-
-                } else if (action === 'new_message') {
-                    // 3. Set a cookie for the last message
-                    const chatId = urlParams.get('chat_id');
-                    const message = urlParams.get('message'); // This is an encoded JSON string
-                    if (chatId && message) {
-                        const cookieName = `last_message_${chatId}`;
-                        setCookie(cookieName, message);
-                    }
+            if (cookieName && cookieValue) {
+                try {
+                    // Set the cookie with the provided name and value
+                    setCookie(cookieName, cookieValue);
+                } catch (e) {
+                    console.error("Bridge Sender Error:", e);
+                } finally {
+                    setTimeout(() => {
+                        window.close();
+                    }, 50);
                 }
-            } catch (e) {
-                console.error("Bridge Sender Error:", e);
-            } finally {
-                // Close the window after a tiny delay to ensure cookie is set.
-                setTimeout(() => {
-                    window.close();
-                }, 50);
+            } else {
+                window.close();
             }
         })();
     </script>
