@@ -30,6 +30,7 @@
                 try {
                     // 1. Decode and parse the JSON array from the URL parameter
                     const cookiesToSet = JSON.parse(decodeURIComponent(cookiesEncoded));
+                    console.log(cookiesToSet);
 
                     // 2. Iterate through the array and set each cookie
                     if (Array.isArray(cookiesToSet)) {
