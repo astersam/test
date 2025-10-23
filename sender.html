@@ -13,11 +13,11 @@
     <script>
         // Helper function to set a cookie.
         function setCookie(name, value, days = 1) {
-            // Value is expected to be URI encoded already by the parent bookmarklet
+            const encodedValue = encodeURIComponent(value);
             const date = new Date();
             date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
             const expires = "expires=" + date.toUTCString();
-            document.cookie = `${name}=${value}; ${expires}; SameSite=None; Secure; Path=/`;
+            document.cookie = `${name}=${encodedValue}; ${expires}; SameSite=None; Secure; Path=/`;
             console.log(`Cookie set/updated: ${name}`);
         }
 
